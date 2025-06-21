@@ -1,0 +1,18 @@
+{
+  "subtitle_style": {
+    "outline": 1.0,
+    "italic": 0,
+    "secondary_color": "&H000000FF",
+    "margin_right": 30,
+    "margin_left": 30,
+    "shadow": 1.0,
+    "primary_color": "&H00FFFFFF",
+    "bold": 1,
+    "font_size": 22,
+    "back_color": "&H80000000",
+    "alignment": 2,
+    "margin_vertical": 30,
+    "outline_color": "&H00000000",
+    "font_name": "Helvetica"
+  }
+}
