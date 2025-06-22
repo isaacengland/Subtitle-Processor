@@ -1,0 +1,28 @@
+Python Dependencies;
+
+Lists all Python packages required for the subtitle processor to function.
+Install these dependencies before running the application.
+
+DEPENDENCY PURPOSES:
+- tkinterdnd2: Enables drag-and-drop functionality in the GUI
+  - Version 0.3.0+ required for stability
+  - Provides cross-platform drag-and-drop support
+  - Essential for the user-friendly interface
+
+INSTALLATION:
+Run: pip install -r requirements.txt
+
+OPTIONAL DEPENDENCIES:
+The system also works with these optional packages if available:
+- Pillow: For image processing (future enhancements)
+- requests: For web-based subtitle sources (future)
+- colorama: For colored terminal output (development)
+
+PYTHON VERSION:
+Requires Python 3.7 or higher for:
+- Modern typing support
+- Improved subprocess handling
+- Better path operations with pathlib
+- Enhanced JSON processing
+
+tkinterdnd2>=0.3.0
