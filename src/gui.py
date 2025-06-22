@@ -544,9 +544,6 @@ class SubtitleProcessorGUI:
                                self.progress_var.set(f"Processing ({i}/{t}): {os.path.basename(f)}"))
                 
                 try:
-                    # Generate output path for this file
-                    output_path = self.file_manager.generate_output_path(file_path, "_styled")
-                    
                     # Load style configuration if available
                     style_config = None
                     if self.current_config_file:
@@ -555,10 +552,9 @@ class SubtitleProcessorGUI:
                     # Process this file using the main processing engine
                     from main import UniversalSubtitleProcessor
                     processor = UniversalSubtitleProcessor()
-                    
                     success = processor.process_video_file(
                         input_video=file_path,
-                        output_video=output_path,
+                        # output_video parameter removed - backup system handles this
                         style_config=style_config,
                         manual_styling=self.manual_styling_var.get()
                     )

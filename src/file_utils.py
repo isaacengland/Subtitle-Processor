@@ -410,3 +410,73 @@ class FileManager:
         except Exception as e:
             self.logger.debug(f"Could not get size for {file_path}: {e}")
             return None
+        
+    def backup_and_replace_file(self, original_file: str, processed_file: str) -> bool:
+        """
+        Backup original file and replace with processed version
+        
+        This method safely backs up the original file and replaces it with
+        the processed version, maintaining the original filename for the result.
+        
+        OPERATION FLOW:
+        1. Create _backups directory if it doesn't exist
+        2. Rename original file with _original suffix
+        3. Move renamed file to _backups directory
+        4. Move processed file to original location
+        
+        Args:
+            original_file (str): Path to the original input file
+            processed_file (str): Path to the processed output file
+            
+        Returns:
+            bool: True if backup and replacement succeeded, False otherwise
+        """
+        try:
+            import shutil
+            
+            # Parse file paths
+            original_path = Path(original_file)
+            processed_path = Path(processed_file)
+            
+            # Create backup directory in same location as original
+            backup_dir = original_path.parent / "_backups"
+            if not self.ensure_directory_exists(str(backup_dir)):
+                self.logger.error(f"Failed to create backup directory: {backup_dir}")
+                return False
+            
+            # Generate backup filename: movie.mkv -> movie_original.mkv
+            backup_filename = f"{original_path.stem}_original{original_path.suffix}"
+            backup_path = backup_dir / backup_filename
+            
+            # Handle backup filename conflicts
+            counter = 1
+            while backup_path.exists():
+                backup_filename = f"{original_path.stem}_original_{counter}{original_path.suffix}"
+                backup_path = backup_dir / backup_filename
+                counter += 1
+            
+            # Step 1: Move original to backup location
+            self.logger.info(f"Backing up original file to: {backup_path}")
+            shutil.move(str(original_path), str(backup_path))
+            
+            # Step 2: Move processed file to original location
+            self.logger.info(f"Moving processed file to: {original_path}")
+            shutil.move(str(processed_path), str(original_path))
+            
+            self.logger.info(f"Successfully replaced {original_path.name} with processed version")
+            self.logger.info(f"Original backed up as: {backup_path}")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to backup and replace file: {e}")
+            
+            # Attempt to restore original if it was moved
+            try:
+                if 'backup_path' in locals() and backup_path.exists() and not original_path.exists():
+                    shutil.move(str(backup_path), str(original_path))
+                    self.logger.info("Restored original file after failure")
+            except Exception as restore_error:
+                self.logger.error(f"Failed to restore original file: {restore_error}")
+            
+            return False
