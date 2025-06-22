@@ -154,6 +154,12 @@ class UniversalSubtitleProcessor:
         processors to transform a video file with basic subtitles into one with 
         professionally styled subtitles, preserving the original format.
         
+        BACKUP BEHAVIOR:
+        The processed file replaces the original file, and the original is
+        automatically backed up to a "_backups" folder with "_original" suffix.
+        - Original: movie.mkv → _backups/movie_original.mkv (backup)
+        - Result: movie.mkv (processed version with original filename)
+        
         UNIVERSAL PROCESSING PIPELINE:
         1. **Validation Phase**: Check file existence and tool availability
         2. **Setup Phase**: Create temporary workspace and determine output path
@@ -162,7 +168,8 @@ class UniversalSubtitleProcessor:
         5. **Conversion Phase**: Convert subtitle format to ASS if needed
         6. **Styling Phase**: Apply styling (JSON config or manual Aegisub)
         7. **Merging Phase**: Merge styled subtitles back into video (same format)
-        8. **Cleanup Phase**: Remove temporary files and report results
+        8. **Backup Phase**: Backup original and replace with processed version
+        9. **Cleanup Phase**: Remove temporary files and report results
         
         FORMAT INDEPENDENCE:
         This method works identically whether processing MKV, MP4, AVI, or any
@@ -171,7 +178,7 @@ class UniversalSubtitleProcessor:
         
         Args:
             input_video (str): Path to input video file (any supported format)
-            output_video (str, optional): Path for output file. Auto-generated if None.
+            output_video (str, optional): IGNORED - backup system now handles file naming
             track_id (int, optional): Specific subtitle track to process. Uses first if None.
             style_config (dict, optional): Direct styling configuration
             style_config_file (str, optional): Path to JSON configuration file
@@ -186,51 +193,42 @@ class UniversalSubtitleProcessor:
         """
         try:
             # === VALIDATION PHASE ===
-            # Ensure the input file exists before proceeding
             if not self.file_manager.validate_file_exists(input_video):
                 self.logger.error(f"Input file not found: {input_video}")
                 return False
             
-            # Check that we have the necessary tools available for processing
             tools_status = self.video_processor.check_tools_available()
             if not any(tools_status.values()):
                 self.logger.error("No video processing tools available")
                 return False
             
-            # Verify this file type is supported by our system
             if not self.can_process_file(input_video):
                 self.logger.error(f"Unsupported file type: {input_video}")
                 return False
             
             # === SETUP PHASE ===
-            # Create a temporary directory for intermediate files
             temp_dir = self.file_manager.create_temp_directory()
             
-            # Generate output path if not provided by user
-            if not output_video:
-                output_video = self.file_manager.generate_output_path(input_video)
+            # Generate temporary output path for processing
+            # We'll use backup system instead of user-specified output
+            temp_output = os.path.join(temp_dir, "processed_output" + Path(input_video).suffix)
             
             # === ANALYSIS PHASE ===
-            # Extract information about all subtitle tracks in the video
             subtitle_tracks = self.video_processor.get_subtitle_tracks(input_video)
             if not subtitle_tracks:
                 self.logger.error("No subtitle tracks found in video file")
                 return False
             
-            # Select which subtitle track to process
             if track_id is None:
-                # Auto-select the first available track
                 selected_track = subtitle_tracks[0]
                 self.logger.info(f"Auto-selected track {selected_track['id']}")
             else:
-                # Use the user-specified track ID
                 selected_track = next((t for t in subtitle_tracks if t['id'] == track_id), None)
                 if not selected_track:
                     self.logger.error(f"Track {track_id} not found")
                     return False
             
             # === EXTRACTION PHASE ===
-            # Extract the selected subtitle track to a temporary file
             extracted_subtitle = os.path.join(temp_dir, f"extracted_{selected_track['id']}.ass")
             if not self.video_processor.extract_subtitle_track(
                 input_video, selected_track['id'], extracted_subtitle
@@ -238,7 +236,6 @@ class UniversalSubtitleProcessor:
                 return False
             
             # === CONVERSION PHASE ===
-            # Ensure subtitle is in ASS format for maximum styling capability
             subtitle_format = self.subtitle_processor.detect_subtitle_format(extracted_subtitle)
             if subtitle_format != 'ass':
                 ass_subtitle = os.path.join(temp_dir, "converted.ass")
@@ -247,44 +244,51 @@ class UniversalSubtitleProcessor:
                 extracted_subtitle = ass_subtitle
             
             # === STYLING PHASE ===
-            # Determine which styling configuration to use
             final_style_config = None
             if style_config_file:
-                # Load styling from JSON file (preferred method)
                 final_style_config = self.subtitle_processor.load_style_config(style_config_file)
                 self.logger.info(f"Loaded style configuration from {style_config_file}")
             elif style_config:
-                # Use directly provided styling configuration
                 final_style_config = style_config
             
-            # Apply the styling using the appropriate method
             if manual_styling and self.aegisub_processor.is_available():
-                # Manual styling: Open Aegisub for user to edit subtitles
                 self.logger.info("Opening Aegisub for manual styling...")
                 self.aegisub_processor.open_for_styling(extracted_subtitle)
                 input("Press Enter after you've finished styling the subtitles in Aegisub...")
             elif final_style_config:
-                # Automatic styling: Apply JSON configuration
                 self.subtitle_processor.apply_styling_from_config(extracted_subtitle, final_style_config)
             
             # === MERGING PHASE ===
-            # Merge the styled subtitles back into the video file (preserving format)
+            # Create processed file in temporary location
             success = self.video_processor.merge_video_with_subtitles(
-                input_video, extracted_subtitle, output_video
+                input_video, extracted_subtitle, temp_output
             )
             
-            if success:
-                self.logger.info(f"Successfully processed video: {output_video}")
+            if not success:
+                self.logger.error("Failed to merge video with subtitles")
+                return False
             
-            return success
+            # === BACKUP AND REPLACEMENT PHASE ===
+            # Use the new backup system to replace original with processed version
+            backup_success = self.file_manager.backup_and_replace_file(
+                original_file=input_video,
+                processed_file=temp_output
+            )
+            
+            if backup_success:
+                self.logger.info(f"Successfully processed and replaced: {input_video}")
+                self.logger.info(f"Original file backed up to _backups folder")
+            else:
+                self.logger.error("Failed to backup and replace file")
+                return False
+            
+            return True
             
         except Exception as e:
-            # Centralized error handling with detailed logging
             self.logger.error(f"Processing failed: {e}")
             return False
         finally:
             # === CLEANUP PHASE ===
-            # Always clean up temporary files, even if processing failed
             self.file_manager.cleanup_temp_directory()
 
 
@@ -357,7 +361,7 @@ def main():
         description="Process video files with styled subtitles",
         epilog="""
 Examples:
-  python main.py video.mkv                           # Process with GUI config
+  python main.py video.mkv                          # Process with GUI config
   python main.py video.mp4 -c config.json           # Use specific config
   python main.py video.avi --no-manual              # Skip Aegisub editing
   python main.py video.mov -o output.mov -t 2       # Specify output and track
